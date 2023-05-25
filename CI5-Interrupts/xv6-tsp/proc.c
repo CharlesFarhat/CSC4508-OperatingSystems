@@ -313,9 +313,10 @@ wait(void)
 
 //
 //  Dummy process election: choose the first RUNNABLE process after old
-//  pable.lock is already held
+//  ptable.lock is already held
 struct proc* elect(struct proc* old) {
-  int base = old ? ptable.proc - old + 1 : 0;
+
+  int base = old ? ptable.proc : 0;
 
   for(int i = base; i<base+NPROC; i++)
     if(ptable.proc[i % NPROC].state == RUNNABLE)
@@ -339,13 +340,30 @@ scheduler(void)
   struct cpu *c = mycpu();
   c->proc = 0;
   
-  for(;;){
+  for(;;) {
     // Enable interrupts on this processor.
     sti();
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    p = elect(p);
+    //p = elect(p);
+    struct proc *highP = 0;
+    int highest_prio = 0;
+
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if (p->state != RUNNABLE) {
+            continue;
+        }
+        // Iterate on all RUNNABLE process to get the one with higher prio
+        if (p->prio > highest_prio) {
+            highest_prio = p->prio;
+            highP = p;
+        }
+    }
+
+    if (highP != 0) {
+          p = highP;
+      }
 
     if(p) {
       // Switch to chosen process.  It is the process's job
@@ -363,8 +381,23 @@ scheduler(void)
       c->proc = 0;
     }
     release(&ptable.lock);
-
   }
+}
+
+// Update prio for all process
+void update_prio(int pid) {
+    struct proc *p;
+
+    acquire(&ptable.lock);
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if (p->pid != pid) {
+            p->prio++;
+        }
+        else {
+            p->prio -= 10; // Decrease prio for current process
+        }
+    }
+    release(&ptable.lock);
 }
 
 // Enter scheduler.  Must hold only ptable.lock
